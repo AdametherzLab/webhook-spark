@@ -1,7 +1,7 @@
 {
   "name": "@adametherzlab/webhook-spark",
-  "version": "0.2.0",
-  "description": "Send minimalist homelab alerts with ASCII sparklines to Discord/Slack/Telegram.",
+  "version": "0.3.0",
+  "description": "ASCII sparklines, gauges, dashboards & threshold alerts for Discord/Slack/Telegram, LCD screens, IoT & AI agents.",
   "type": "module",
   "main": "src/index.ts",
   "module": "src/index.ts",
@@ -31,7 +31,15 @@
     "discord-webhook",
     "telegram-bot",
     "sparkline",
-    "cli"
+    "cli",
+    "lcd",
+    "oled",
+    "iot",
+    "ai-agent",
+    "dashboard",
+    "gauge",
+    "arduino",
+    "raspberry-pi"
   ],
   "author": "AdametherzLab",
   "license": "MIT",

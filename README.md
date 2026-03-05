@@ -1,202 +1,211 @@
-# webhook-spark ⚡
+# webhook-spark
 
-**Send minimalist homelab alerts with ASCII sparklines to Discord/Slack**
+**ASCII sparklines, gauges, dashboards & threshold alerts for Discord/Slack/Telegram, LCD screens, IoT & AI agents.**
 
-## ✨ Features
+Zero dependencies. TypeScript first. Under 15KB.
 
-- 📊 **Beautiful ASCII sparklines** – Turn boring number arrays into visual trends
-- 🔌 **Webhook support** – Discord and Slack out of the box
-- 🚀 **Zero dependencies** – Uses only Node.js/Bun built-ins
-- 📦 **Tiny footprint** – Less than 10KB minified
-- 🛡️ **TypeScript first** – Full type safety and autocomplete
-- 🎨 **Customizable** – Multiple character sets and styling options
+## Who is this for?
 
-## 📦 Installation
+- **Homelab / DevOps** -- server monitoring alerts with sparklines and threshold status
+- **LCD / OLED hackers** -- fixed-width output that fits 16x2, 20x4, and SSD1306 displays
+- **DIY / IoT makers** -- multi-sensor dashboards for greenhouses, aquariums, server racks
+- **AI agent builders** -- compact metric summaries that fit in LLM context windows
+
+## Installation
 
 ```bash
-# Using Bun (recommended)
-bun add webhook-spark
-
-# Using npm
-npm install webhook-spark
-
-# Using yarn
-yarn add webhook-spark
+bun add @adametherzlab/webhook-spark
+# or: npm install @adametherzlab/webhook-spark
 ```
 
-## 🚀 Quick Start
+## Quick Start
 
 ```typescript
-// REMOVED external import: import { generateSparkline, sendWebhook } from 'webhook-spark';
+import { spark, gauge, stats, sparkWithStatus, dashboard, sendWebhook } from '@adametherzlab/webhook-spark';
 
-// Create a sparkline from your metrics
-const cpuUsage = [10, 25, 60, 85, 90, 45, 30];
-const sparkline = generateSparkline(cpuUsage);
+// Sparkline from numbers
+spark([10, 25, 60, 85, 90, 45, 30]);
+// => "▁▂▅▇█▃▂"
 
-// Send to Discord
-await sendWebhook({
-  url: 'https://discord.com/api/webhooks/your-webhook-id',
-  provider: 'discord',
-  content: `CPU usage: ${sparkline}`,
-  username: 'Server Monitor'
-});
+// Progress gauge (battery, tank level, task completion)
+gauge(75, 100);
+// => "████████████████░░░░ 75%"
 
-console.log(`📈 Sparkline sent: ${sparkline}`);
-// Output: 📈 Sparkline sent: ▁▂▅▇██▃▂
+// Summary statistics
+stats([10, 20, 30, 40, 50]).summary;
+// => "min=10 max=50 avg=30 p95=48"
+
+// Threshold-aware sparkline
+sparkWithStatus([45, 50, 62, 78, 95], { warning: 70, critical: 90 });
+// => { sparkline: "▂▃▅▆█", status: "critical", emoji: "🔴", ... }
+
+// Multi-metric dashboard in one call
+dashboard([
+  { name: 'CPU',  values: [45,50,62,78], unit: '%', thresholds: { warning: 70, critical: 90 } },
+  { name: 'MEM',  values: [78,80,82,85], unit: '%', thresholds: { warning: 80, critical: 95 } },
+  { name: 'DISK', values: [62,63,63,64], unit: '%', thresholds: { warning: 85, critical: 95 } },
+]);
+// =>
+// CPU    78% ▂▃▅█ ⚠️
+// MEM    85% ▅▆▇█ ⚠️
+// DISK   64% ▅▅▅▅ ✅
 ```
 
-## 📖 API Reference
+## API Reference
 
-### Sparkline Generation
+### `spark(values)` -- Simple Sparkline
 
 ```typescript
-// REMOVED external import: import { generateSparkline, generateSparklineWithOutliers } from 'webhook-spark';
+spark([1, 5, 2, 8, 3, 7]);  // => "▁▅▂█▃▆"
+```
 
-// Basic sparkline
-const sparkline = generateSparkline([1, 2, 3, 4, 5]);
-// Returns: ▁▂▃▄▅
+### `gauge(value, max, options?)` -- Progress / Level Gauge
 
-// With custom options
-const custom = generateSparkline([10, 50, 90], {
-  characterSet: '·∙●○◉◎',
-  minValue: 0,
-  maxValue: 100
-});
+```typescript
+gauge(75, 100)                          // => "████████████████░░░░ 75%"
+gauge(3.7, 4.2, { label: "BATT" })     // => "BATT ██████████████████░░ 88%"
+gauge(6, 20, { width: 10, fill: "#", empty: "." })  // => "###....... 30%"
 
-// Handle outliers
-const withOutliers = generateSparklineWithOutliers(
-  [1, 1000, 2, 3, 4],
-  { threshold: 2 } // Values > 2 standard deviations marked
+// Threshold alerts
+gauge(92, 100, { thresholds: { warning: 70, critical: 90 } })
+// => "████████████████████ 92% CRITICAL"
+```
+
+**LCD use case:** `lcd.print(gauge(sensorVal, 1023, { width: 16 }))` -- fits a 16-char LCD line.
+
+Options: `width` (default 20), `fill` (default `█`), `empty` (default `░`), `showPercent` (default true), `showValue`, `label`, `thresholds`.
+
+### `stats(values, options?)` -- Summary Statistics
+
+```typescript
+const s = stats([10, 20, 30, 40, 50]);
+// s.min=10, s.max=50, s.avg=30, s.median=30, s.stdDev=14.14
+// s.percentiles = { 95: 48 }
+// s.summary = "min=10 max=50 avg=30 p95=48"
+
+// Custom percentiles
+stats(data, { percentiles: [50, 90, 99], decimals: 1 });
+```
+
+**AI agent use case:** `stats([...tokenCosts]).summary` -- one-line data summary an LLM can reason about.
+
+### `sparkWithStatus(values, thresholds)` -- Threshold-Aware Sparkline
+
+```typescript
+sparkWithStatus([45, 50, 62, 78, 95], { warning: 70, critical: 90 })
+// => {
+//   sparkline: "▂▃▅▆█",
+//   status: "critical",
+//   emoji: "🔴",
+//   color: 0xe74c3c,    // Discord embed color
+//   breachCount: 2,
+//   breachPercent: 40
+// }
+
+// Inverted mode: low values are bad (disk space, battery)
+sparkWithStatus([15, 10, 5, 3], { warning: 10, critical: 5, invert: true })
+// => status: "critical"
+```
+
+Discord embed color auto-maps: green (ok) / yellow (warning) / red (critical).
+
+### `dashboard(metrics, options?)` -- Multi-Metric Display
+
+```typescript
+// Full mode (with sparklines)
+dashboard([
+  { name: 'CPU',  values: [45,50,62,78], unit: '%', thresholds: { warning: 70, critical: 90 } },
+  { name: 'MEM',  values: [78,80,82,85], unit: '%', thresholds: { warning: 80, critical: 95 } },
+  { name: 'DISK', values: [62,63,63,64], unit: '%', thresholds: { warning: 85, critical: 95 } },
+  { name: 'TEMP', values: [42,44,45,43], unit: '°C', thresholds: { warning: 60, critical: 75 } },
+]);
+// CPU   78% ▂▃▅█ ⚠️
+// MEM   85% ▅▆▇█ ⚠️
+// DISK  64% ▅▅▅▅ ✅
+// TEMP  43°C ▃▄▅▃ ✅
+
+// Compact mode (for 20x4 LCD or AI context)
+dashboard([...], { compact: true });
+// CPU  78% ⚠️
+// MEM  85% ⚠️
+// DISK 64% ✅
+// TEMP 43°C ✅
+```
+
+**LCD use case:** Render to 20x4 or 128x64 OLED in one call.
+**AI agent use case:** Paste entire system status into context in 4 lines.
+
+### `barChart(entries, options?)` -- Horizontal Bar Chart
+
+```typescript
+barChart([
+  { label: 'GET',  value: 150 },
+  { label: 'POST', value: 80 },
+  { label: 'PUT',  value: 30 },
+], { maxBarWidth: 15 });
+// GET  ███████████████ 150
+// POST ████████       80
+// PUT  ███            30
+```
+
+### `trend(values, window?)` -- Trend Arrow
+
+```typescript
+trend([10, 20, 30]);  // => "↑"
+trend([30, 20, 10]);  // => "↓"
+trend([10, 10, 10]);  // => "→"
+```
+
+### `sendWebhook(payload, config)` -- Webhook Delivery
+
+Supports Discord, Slack, and Telegram webhooks with validation, retry, and timeout.
+
+```typescript
+await sendWebhook(
+  { timestamp: new Date(), metricName: 'cpu', sparkline: spark(cpuData), rawValues: cpuData },
+  { endpoint: 'https://discord.com/api/webhooks/...', provider: 'discord' }
 );
 ```
 
-### Webhook Delivery
+### `generateSparkline(data, options)` -- Advanced Sparkline
+
+Full control: custom character sets, interpolation, axis, outlier detection.
+
+## Use Case Examples
+
+### IoT Greenhouse Dashboard
 
 ```typescript
-// REMOVED external import: import { sendWebhook } from 'webhook-spark';
-
-// Discord example
-await sendWebhook({
-  url: 'DISCORD_WEBHOOK_URL',
-  provider: 'discord',
-  content: 'Server alert!',
-  embeds: [{
-    title: 'CPU Usage',
-    description: generateSparkline([10, 25, 60, 85]),
-    color: 0xff0000,
-    timestamp: new Date().toISOString()
-  }]
-});
-
-// Slack example
-await sendWebhook({
-  url: 'SLACK_WEBHOOK_URL',
-  provider: 'slack',
-  content: 'Daily metrics',
-  blocks: [{
-    type: 'section',
-    text: { type: 'mrkdwn', text: `*Memory usage:* ${generateSparkline([30, 45, 60])}` }
-  }]
-});
+const sensors = [
+  { name: 'SOIL', values: moistureReadings, unit: '%', thresholds: { warning: 30, critical: 15, invert: true } },
+  { name: 'TEMP', values: tempReadings, unit: '°C', thresholds: { warning: 35, critical: 40 } },
+  { name: 'HUM',  values: humidityReadings, unit: '%' },
+];
+console.log(dashboard(sensors));
 ```
 
-### Type Utilities
+### AI Agent System Prompt
 
 ```typescript
-// REMOVED external import: import { isNumericArray, isWebhookConfig } from 'webhook-spark';
-
-// Type guards for validation
-if (isNumericArray(data)) {
-  // data is now typed as readonly number[]
-  const sparkline = generateSparkline(data);
-}
-
-const config = { url: '...', provider: 'discord' };
-if (isWebhookConfig(config)) {
-  // config is valid WebhookConfig
-  await sendWebhook(config);
-}
+const status = dashboard([
+  { name: 'Tokens', values: tokenHistory, unit: 'K', thresholds: { warning: 80, critical: 95 } },
+  { name: 'Tasks',  values: taskCounts, thresholds: { warning: 50, critical: 100 } },
+], { compact: true });
+// Inject into system prompt: 2 lines, minimal tokens
 ```
 
-## 🧪 Examples
-
-### Homelab CPU Monitor
+### Arduino LCD (16x2)
 
 ```typescript
-// REMOVED external import: import { generateSparkline, sendWebhook } from 'webhook-spark';
-import os from 'os';
-
-// Simulate collecting CPU metrics
-const cpuMetrics = [45, 60, 75, 85, 90, 80, 65];
-const sparkline = generateSparkline(cpuMetrics);
-
-// Send alert if high usage
-if (cpuMetrics[cpuMetrics.length - 1] > 80) {
-  await sendWebhook({
-    url: process.env.DISCORD_WEBHOOK!,
-    provider: 'discord',
-    content: `🚨 High CPU usage detected!`,
-    embeds: [{
-      title: 'CPU Trend',
-      description: `\`${sparkline}\``,
-      fields: [
-        { name: 'Current', value: `${cpuMetrics[cpuMetrics.length - 1]}%`, inline: true },
-        { name: 'Peak', value: `${Math.max(...cpuMetrics)}%`, inline: true }
-      ],
-      color: 0xff5500
-    }]
-  });
-}
+const line1 = gauge(analogRead(A0), 1023, { width: 16, showPercent: false });
+const line2 = `T:${temp}C ${trend(tempHistory)}`;
+lcd.print(line1 + '\n' + line2);
 ```
 
-### Daily Health Report
+## License
 
-```typescript
-// REMOVED external import: import { generateSparkline, generateASCIIArt } from 'webhook-spark';
-
-// Create a dashboard-like report
-const report = `
-📊 **Daily System Report**
-━━━━━━━━━━━━━━━━━━━━
-CPU:    ${generateSparkline([10, 25, 40, 60, 45, 30])}
-Memory: ${generateSparkline([50, 55, 60, 65, 70, 68])}
-Disk:   ${generateSparkline([85, 86, 87, 88, 89, 90])}
-
-${generateASCIIArt('HEALTHY', { font: 'block' })}
-`;
-
-await sendWebhook({
-  url: process.env.SLACK_WEBHOOK!,
-  provider: 'slack',
-  content: report
-});
-```
-
-## 🔧 Configuration
-
-```json
-{
-  "defaultWebhook": "https://discord.com/api/webhooks/your-id",
-  "defaultProvider": "discord",
-  "dataDir": "~/.webhook-spark/data",
-  "maxEntries": 1000
-}
-```
-
-## 🤝 Contributing
-
-Found a bug? Have an idea for a new feature? Contributions are welcome!
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b cool-new-feature`)
-3. Commit your changes (`git commit -am 'Add cool feature'`)
-4. Push to the branch (`git push origin cool-new-feature`)
-5. Open a Pull Request
-
-## 📄 License
-
-MIT © AdametherzLab
+MIT
 
 ---
 
-Made with ⚡ by homelab enthusiasts for homelab enthusiasts. Keep your servers happy and your alerts beautiful!
+Built for homelabs, hackerspaces, and AI agents.

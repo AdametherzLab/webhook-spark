@@ -139,3 +139,65 @@ export type WebhookSendResult =
 export type SparklineGenerationResult =
   | { readonly success: true; readonly sparkline: string }
   | { readonly success: false; readonly error: ValidationError };
+
+// --- v0.3.0: Gauge, Stats, Threshold, Dashboard ---
+
+export interface GaugeOptions {
+  readonly width?: number;
+  readonly fill?: string;
+  readonly empty?: string;
+  readonly showPercent?: boolean;
+  readonly showValue?: boolean;
+  readonly label?: string;
+  readonly thresholds?: {
+    readonly warning?: number;
+    readonly critical?: number;
+  };
+}
+
+export interface StatsOptions {
+  readonly percentiles?: readonly number[];
+  readonly decimals?: number;
+}
+
+export interface StatsResult {
+  readonly min: number;
+  readonly max: number;
+  readonly avg: number;
+  readonly median: number;
+  readonly stdDev: number;
+  readonly percentiles: Record<number, number>;
+  readonly count: number;
+  readonly sum: number;
+  readonly summary: string;
+}
+
+export interface ThresholdConfig {
+  readonly warning?: number;
+  readonly critical?: number;
+  readonly invert?: boolean;
+}
+
+export interface SparkStatusResult {
+  readonly sparkline: string;
+  readonly status: "ok" | "warning" | "critical";
+  readonly emoji: string;
+  readonly color: number;
+  readonly breachCount: number;
+  readonly breachPercent: number;
+}
+
+export interface DashboardMetric {
+  readonly name: string;
+  readonly values: readonly number[];
+  readonly unit?: string;
+  readonly thresholds?: ThresholdConfig;
+  readonly sparkWidth?: number;
+}
+
+export interface DashboardOptions {
+  readonly compact?: boolean;
+  readonly sparkWidth?: number;
+  readonly align?: boolean;
+  readonly separator?: string;
+}

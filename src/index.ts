@@ -17,8 +17,15 @@ import type {
   HttpRequestOptions,
   WebhookProvider,
   TelegramConfig,
+  GaugeOptions,
+  StatsOptions,
+  StatsResult,
+  ThresholdConfig,
+  SparkStatusResult,
+  DashboardMetric,
+  DashboardOptions,
 } from "./types.js";
-import { generateSparkline, generateSparklineWithOutliers, generateASCIIArt, spark, barChart, trend } from "./sparkline.js";
+import { generateSparkline, generateSparklineWithOutliers, generateASCIIArt, spark, barChart, trend, gauge, stats, sparkWithStatus, dashboard } from "./sparkline.js";
 import { sendWebhook } from "./webhook.js";
 import { isNumericArray, isSparklineConfig, isWebhookConfig } from "./types.js";
 
@@ -29,6 +36,10 @@ export {
   spark,
   barChart,
   trend,
+  gauge,
+  stats,
+  sparkWithStatus,
+  dashboard,
   sendWebhook,
   isNumericArray,
   isSparklineConfig,
@@ -53,4 +64,11 @@ export type {
   HttpRequestOptions,
   WebhookProvider,
   TelegramConfig,
+  GaugeOptions,
+  StatsOptions,
+  StatsResult,
+  ThresholdConfig,
+  SparkStatusResult,
+  DashboardMetric,
+  DashboardOptions,
 };
