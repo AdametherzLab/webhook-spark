@@ -201,3 +201,66 @@ export interface DashboardOptions {
   readonly align?: boolean;
   readonly separator?: string;
 }
+
+// --- v0.4.0: Kaomoji, Heatmap, Table, Histogram, Compare ---
+
+export type KaomojiMood = "happy" | "ok" | "warning" | "critical" | "sad" | "angry"
+  | "love" | "surprised" | "sleeping" | "working" | "celebrating" | "confused" | "dead";
+
+export type KaomojiTheme = "classic" | "cats" | "bears" | "stars" | "minimal";
+
+export interface KaomojiOptions {
+  readonly theme?: KaomojiTheme;
+}
+
+export interface KaomojiStatusOptions {
+  readonly theme?: KaomojiTheme;
+  readonly thresholds?: ThresholdConfig;
+}
+
+export interface KaomojiResult {
+  readonly face: string;
+  readonly mood: KaomojiMood;
+}
+
+export interface HeatmapOptions {
+  readonly chars?: readonly string[];
+  readonly showLabels?: boolean;
+  readonly rowLabels?: readonly string[];
+  readonly colLabels?: readonly string[];
+  readonly min?: number;
+  readonly max?: number;
+}
+
+export interface MiniTableOptions {
+  readonly border?: "single" | "double" | "rounded" | "none";
+  readonly align?: readonly ("left" | "right" | "center")[];
+  readonly header?: boolean;
+  readonly compact?: boolean;
+  readonly maxWidth?: number;
+}
+
+export interface HistogramOptions {
+  readonly bins?: number;
+  readonly barWidth?: number;
+  readonly showCounts?: boolean;
+  readonly fill?: string;
+  readonly showBounds?: boolean;
+  readonly percentages?: boolean;
+}
+
+export interface CompareOptions {
+  readonly barWidth?: number;
+  readonly showDelta?: boolean;
+  readonly showPercent?: boolean;
+  readonly unit?: string;
+  readonly mode?: "bars" | "spark" | "compact";
+}
+
+export interface CompareResult {
+  readonly display: string;
+  readonly delta: number;
+  readonly deltaPercent: number;
+  readonly direction: "up" | "down" | "same";
+  readonly arrow: string;
+}

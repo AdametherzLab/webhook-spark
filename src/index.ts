@@ -24,8 +24,18 @@ import type {
   SparkStatusResult,
   DashboardMetric,
   DashboardOptions,
+  KaomojiMood,
+  KaomojiTheme,
+  KaomojiOptions,
+  KaomojiStatusOptions,
+  KaomojiResult,
+  HeatmapOptions,
+  MiniTableOptions,
+  HistogramOptions,
+  CompareOptions,
+  CompareResult,
 } from "./types.js";
-import { generateSparkline, generateSparklineWithOutliers, generateASCIIArt, spark, barChart, trend, gauge, stats, sparkWithStatus, dashboard } from "./sparkline.js";
+import { generateSparkline, generateSparklineWithOutliers, generateASCIIArt, spark, barChart, trend, gauge, stats, sparkWithStatus, dashboard, kaomoji, kaomojiAll, kaomojiStatus, kaomojiThemes, heatmap, miniTable, kvTable, histogram, compare } from "./sparkline.js";
 import { sendWebhook } from "./webhook.js";
 import { isNumericArray, isSparklineConfig, isWebhookConfig } from "./types.js";
 
@@ -40,6 +50,15 @@ export {
   stats,
   sparkWithStatus,
   dashboard,
+  kaomoji,
+  kaomojiAll,
+  kaomojiStatus,
+  kaomojiThemes,
+  heatmap,
+  miniTable,
+  kvTable,
+  histogram,
+  compare,
   sendWebhook,
   isNumericArray,
   isSparklineConfig,
@@ -71,4 +90,14 @@ export type {
   SparkStatusResult,
   DashboardMetric,
   DashboardOptions,
+  KaomojiMood,
+  KaomojiTheme,
+  KaomojiOptions,
+  KaomojiStatusOptions,
+  KaomojiResult,
+  HeatmapOptions,
+  MiniTableOptions,
+  HistogramOptions,
+  CompareOptions,
+  CompareResult,
 };

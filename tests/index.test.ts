@@ -8,6 +8,15 @@ import {
   stats,
   sparkWithStatus,
   dashboard,
+  kaomoji,
+  kaomojiAll,
+  kaomojiStatus,
+  kaomojiThemes,
+  heatmap,
+  miniTable,
+  kvTable,
+  histogram,
+  compare,
 } from "../src/index.js";
 import type {
   SparklineConfig,
@@ -335,5 +344,255 @@ describe("dashboard", () => {
     const lines = result.split("\n");
     // First line should be padded to match longest name
     expect(lines[0]).toStartWith("A       ");
+  });
+});
+
+// --- v0.4.0 Tests ---
+
+describe("kaomoji", () => {
+  it("should return a classic happy face", () => {
+    const result = kaomoji("happy");
+    expect(result).toBeString();
+    expect(result).toBe("(*^▽^*)");
+  });
+
+  it("should return a cat face with cats theme", () => {
+    const result = kaomoji("happy", { theme: "cats" });
+    expect(result).toBe("ᓚᘏᗢ");
+  });
+
+  it("should map value to ok mood via kaomojiStatus", () => {
+    const result = kaomojiStatus(50, 100);
+    expect(result.mood).toBe("ok");
+    expect(result.face).toBeString();
+  });
+
+  it("should detect critical via kaomojiStatus with custom thresholds", () => {
+    const result = kaomojiStatus(95, 100, { thresholds: { warning: 70, critical: 90 } });
+    expect(result.mood).toBe("critical");
+  });
+
+  it("should return multiple faces from kaomojiAll", () => {
+    const faces = kaomojiAll("happy");
+    expect(faces.length).toBeGreaterThanOrEqual(3);
+    for (const f of faces) expect(f).toBeString();
+  });
+
+  it("should list all themes", () => {
+    const themes = kaomojiThemes();
+    expect(themes).toContain("classic");
+    expect(themes).toContain("cats");
+    expect(themes).toContain("bears");
+    expect(themes).toContain("stars");
+    expect(themes).toContain("minimal");
+  });
+
+  it("should fallback gracefully for unknown theme/mood combo", () => {
+    // All moods should have entries in all themes
+    const result = kaomoji("dead", { theme: "minimal" });
+    expect(result).toBeString();
+    expect(result.length).toBeGreaterThan(0);
+  });
+});
+
+describe("heatmap", () => {
+  it("should render a 3x4 grid with 3 lines", () => {
+    const result = heatmap([[2, 5, 8, 3], [1, 7, 9, 4], [3, 6, 7, 2]]);
+    const lines = result.split("\n");
+    expect(lines.length).toBe(3);
+  });
+
+  it("should use all middle chars for same values", () => {
+    const result = heatmap([[5, 5], [5, 5]]);
+    // All same → maps to middle index
+    const chars = [" ", "░", "▒", "▓", "█"];
+    const midChar = chars[2]; // ▒
+    expect(result).toInclude(midChar);
+  });
+
+  it("should use custom chars", () => {
+    const result = heatmap([[0, 5, 10]], { chars: [".", "o", "O", "@", "#"] });
+    expect(result).toInclude(".");
+    expect(result).toInclude("#");
+  });
+
+  it("should show row labels when enabled", () => {
+    const result = heatmap([[1, 2], [3, 4]], {
+      showLabels: true,
+      rowLabels: ["Mon", "Tue"],
+    });
+    expect(result).toInclude("Mon");
+    expect(result).toInclude("Tue");
+  });
+
+  it("should return empty string for empty data", () => {
+    expect(heatmap([])).toBe("");
+  });
+
+  it("should handle jagged rows gracefully", () => {
+    const result = heatmap([[1, 2, 3], [4]]);
+    const lines = result.split("\n");
+    expect(lines.length).toBe(2);
+  });
+});
+
+describe("miniTable", () => {
+  it("should render a kvTable with all keys and values", () => {
+    const result = kvTable([
+      { key: "CPU", value: "78%" },
+      { key: "MEM", value: "4.2GB" },
+      { key: "DISK", value: "120GB" },
+    ]);
+    expect(result).toInclude("CPU");
+    expect(result).toInclude("78%");
+    expect(result).toInclude("MEM");
+    expect(result).toInclude("4.2GB");
+    expect(result).toInclude("DISK");
+  });
+
+  it("should add separator line after header row", () => {
+    const result = miniTable(
+      [["Name", "Value"], ["CPU", "78%"]],
+      { header: true }
+    );
+    expect(result).toInclude("├");
+    expect(result).toInclude("┼");
+  });
+
+  it("should not include box chars with border none", () => {
+    const result = miniTable(
+      [["A", "B"], ["C", "D"]],
+      { border: "none" }
+    );
+    expect(result).not.toInclude("│");
+    expect(result).not.toInclude("┌");
+    expect(result).not.toInclude("└");
+  });
+
+  it("should auto-size columns to longest cell", () => {
+    const result = miniTable([
+      ["Short", "X"],
+      ["LongerLabel", "YY"],
+    ]);
+    // Both rows should have same-width structure
+    const lines = result.split("\n");
+    // Top and bottom borders should be same length
+    expect(lines[0].length).toBe(lines[lines.length - 1].length);
+  });
+
+  it("should return empty string for empty rows", () => {
+    expect(miniTable([])).toBe("");
+  });
+
+  it("should render rounded borders", () => {
+    const result = miniTable([["A", "B"]], { border: "rounded" });
+    expect(result).toInclude("╭");
+    expect(result).toInclude("╯");
+  });
+
+  it("should return empty string for empty kvTable", () => {
+    expect(kvTable([])).toBe("");
+  });
+});
+
+describe("histogram", () => {
+  it("should produce correct number of lines for 5 bins", () => {
+    const result = histogram([1, 1, 2, 2, 2, 3, 3, 3, 3, 4, 5, 5, 5, 5, 5], { bins: 5 });
+    const lines = result.split("\n");
+    expect(lines.length).toBe(5);
+  });
+
+  it("should handle all-same values with 1 effective bin", () => {
+    const result = histogram([7, 7, 7, 7], { bins: 3 });
+    const lines = result.split("\n");
+    // All values go into first bin since range is 0
+    expect(lines.length).toBe(3);
+    expect(result).toInclude("█");
+  });
+
+  it("should show percentages when enabled", () => {
+    const result = histogram([1, 2, 3], { bins: 3, percentages: true });
+    expect(result).toInclude("%");
+  });
+
+  it("should use custom fill character", () => {
+    const result = histogram([1, 2, 3, 4, 5], { bins: 5, fill: "#" });
+    expect(result).toInclude("#");
+    expect(result).not.toInclude("█");
+  });
+
+  it("should handle single value", () => {
+    const result = histogram([42], { bins: 3 });
+    expect(result).toBeString();
+    expect(result.split("\n").length).toBe(3);
+  });
+
+  it("should handle negative values", () => {
+    const result = histogram([-5, -3, 0, 2, 4], { bins: 3 });
+    expect(result).toInclude("-");
+  });
+
+  it("should return empty string for empty array", () => {
+    expect(histogram([])).toBe("");
+  });
+});
+
+describe("compare", () => {
+  it("should detect upward change", () => {
+    const result = compare("Before", 45, "After", 78);
+    expect(result.delta).toBe(33);
+    expect(result.direction).toBe("up");
+    expect(result.arrow).toBe("↑");
+    expect(result.deltaPercent).toBeGreaterThan(0);
+    expect(result.display).toInclude("Before");
+    expect(result.display).toInclude("After");
+  });
+
+  it("should detect downward change", () => {
+    const result = compare("Before", 100, "After", 60);
+    expect(result.delta).toBe(-40);
+    expect(result.direction).toBe("down");
+    expect(result.arrow).toBe("↓");
+  });
+
+  it("should detect same values", () => {
+    const result = compare("A", 50, "B", 50);
+    expect(result.delta).toBe(0);
+    expect(result.direction).toBe("same");
+    expect(result.arrow).toBe("→");
+  });
+
+  it("should compute avg-based delta for arrays", () => {
+    const result = compare("Week1", [10, 20, 30], "Week2", [15, 25, 35]);
+    expect(result.delta).toBe(5);
+    expect(result.direction).toBe("up");
+  });
+
+  it("should render compact mode as single line", () => {
+    const result = compare("Plan", 100, "Actual", 87, { mode: "compact", unit: "%" });
+    expect(result.display).not.toInclude("\n");
+    expect(result.display).toInclude("Plan");
+    expect(result.display).toInclude("Actual");
+    expect(result.display).toInclude("%");
+  });
+
+  it("should render spark mode with sparklines for arrays", () => {
+    const result = compare("Week1", [10, 20, 30], "Week2", [15, 25, 35], { mode: "spark" });
+    expect(result.display).toInclude("avg=");
+    expect(result.display).toInclude("↑");
+  });
+
+  it("should handle val1=0 without division error", () => {
+    const result = compare("Before", 0, "After", 10);
+    expect(result.delta).toBe(10);
+    expect(result.direction).toBe("up");
+    expect(result.deltaPercent).toBe(100);
+  });
+
+  it("should handle both values zero", () => {
+    const result = compare("A", 0, "B", 0);
+    expect(result.delta).toBe(0);
+    expect(result.direction).toBe("same");
+    expect(result.deltaPercent).toBe(0);
   });
 });
