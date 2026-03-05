@@ -1,7 +1,7 @@
 {
   "name": "@adametherzlab/webhook-spark",
-  "version": "0.1.0",
-  "description": "Send minimalist homelab alerts with ASCII sparklines to Discord/Slack.",
+  "version": "0.2.0",
+  "description": "Send minimalist homelab alerts with ASCII sparklines to Discord/Slack/Telegram.",
   "type": "module",
   "main": "src/index.ts",
   "module": "src/index.ts",
@@ -29,6 +29,8 @@
     "devops",
     "monitoring",
     "discord-webhook",
+    "telegram-bot",
+    "sparkline",
     "cli"
   ],
   "author": "AdametherzLab",

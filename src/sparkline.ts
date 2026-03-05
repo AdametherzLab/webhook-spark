@@ -158,6 +158,58 @@ export function generateSparklineWithOutliers(
   return { sparkline, outliers };
 }
 
+/**
+ * Simple sparkline from just an array of numbers.
+ * Returns a single line of block characters (▁▂▃▄▅▆▇█).
+ */
+export function spark(values: readonly number[]): string {
+  if (values.length === 0) return "";
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  if (min === max) return BLOCK_CHARACTERS[3].repeat(values.length);
+  return values.map(v => {
+    const idx = Math.round(((v - min) / (max - min)) * (BLOCK_CHARACTERS.length - 1));
+    return BLOCK_CHARACTERS[idx];
+  }).join("");
+}
+
+/**
+ * Horizontal bar chart as text lines.
+ * Each entry: "label ████████ value"
+ */
+export function barChart(
+  entries: readonly { label: string; value: number }[],
+  options?: { maxBarWidth?: number; showValues?: boolean }
+): string {
+  if (entries.length === 0) return "";
+  const maxWidth = options?.maxBarWidth ?? 20;
+  const showValues = options?.showValues ?? true;
+  const maxVal = Math.max(...entries.map(e => e.value));
+  const maxLabelLen = Math.max(...entries.map(e => e.label.length));
+
+  return entries.map(e => {
+    const barLen = maxVal === 0 ? 0 : Math.round((e.value / maxVal) * maxWidth);
+    const bar = "█".repeat(barLen);
+    const label = e.label.padEnd(maxLabelLen);
+    return showValues ? `${label} ${bar} ${e.value}` : `${label} ${bar}`;
+  }).join("\n");
+}
+
+/**
+ * Trend indicator: ↑ ↓ → based on last N values.
+ */
+export function trend(values: readonly number[], window: number = 3): string {
+  if (values.length < 2) return "→";
+  const recent = values.slice(-window);
+  const first = recent[0];
+  const last = recent[recent.length - 1];
+  const diff = last - first;
+  const threshold = Math.abs(first) * 0.05 || 0.01;
+  if (diff > threshold) return "↑";
+  if (diff < -threshold) return "↓";
+  return "→";
+}
+
 export function generateASCIIArt(
   dataPoints: readonly number[],
   config: ASCIIArtConfig

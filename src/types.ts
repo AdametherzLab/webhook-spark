@@ -18,7 +18,7 @@ export interface WebhookPayload {
   readonly metadata?: Record<string, unknown>;
 }
 
-export type WebhookProvider = "discord" | "slack";
+export type WebhookProvider = "discord" | "slack" | "telegram";
 
 export interface WebhookConfig {
   readonly endpoint: string;
@@ -26,6 +26,7 @@ export interface WebhookConfig {
   readonly authHeaders?: Record<string, string>;
   readonly timeoutMs?: number;
   readonly retryAttempts?: number;
+  readonly telegram?: TelegramConfig;
 }
 
 export interface DiscordEmbed {
@@ -100,6 +101,12 @@ export interface HttpRequestOptions {
   readonly timeout?: number;
 }
 
+export interface TelegramConfig {
+  readonly botToken: string;
+  readonly chatId: string;
+  readonly parseMode?: "Markdown" | "MarkdownV2" | "HTML";
+}
+
 export type NumericArray = readonly number[];
 
 export function isNumericArray(value: unknown): value is NumericArray {
@@ -121,7 +128,7 @@ export function isWebhookConfig(value: unknown): value is WebhookConfig {
   const config = value as Record<string, unknown>;
   return (
     typeof config.endpoint === "string" &&
-    (config.provider === "discord" || config.provider === "slack")
+    (config.provider === "discord" || config.provider === "slack" || config.provider === "telegram")
   );
 }
 

@@ -16,8 +16,9 @@ import type {
   HttpMethod,
   HttpRequestOptions,
   WebhookProvider,
+  TelegramConfig,
 } from "./types.js";
-import { generateSparkline, generateSparklineWithOutliers, generateASCIIArt } from "./sparkline.js";
+import { generateSparkline, generateSparklineWithOutliers, generateASCIIArt, spark, barChart, trend } from "./sparkline.js";
 import { sendWebhook } from "./webhook.js";
 import { isNumericArray, isSparklineConfig, isWebhookConfig } from "./types.js";
 
@@ -25,6 +26,9 @@ export {
   generateSparkline,
   generateSparklineWithOutliers,
   generateASCIIArt,
+  spark,
+  barChart,
+  trend,
   sendWebhook,
   isNumericArray,
   isSparklineConfig,
@@ -48,4 +52,5 @@ export type {
   HttpMethod,
   HttpRequestOptions,
   WebhookProvider,
+  TelegramConfig,
 };

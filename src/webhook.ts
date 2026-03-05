@@ -11,6 +11,7 @@ import type {
   WebhookError,
   ValidationError,
   HttpRequestOptions,
+  TelegramConfig,
 } from "./types.js";
 
 export interface WebhookDeliveryOptions {
@@ -62,8 +63,8 @@ function validateWebhookConfig(config: WebhookConfig): void {
   }
   if (!config.provider) {
     errors.push("Provider is required");
-  } else if (config.provider !== "discord" && config.provider !== "slack") {
-    errors.push("Provider must be 'discord' or 'slack'");
+  } else if (config.provider !== "discord" && config.provider !== "slack" && config.provider !== "telegram") {
+    errors.push("Provider must be 'discord', 'slack', or 'telegram'");
   }
   if (config.timeoutMs !== undefined && (config.timeoutMs < 100 || config.timeoutMs > 60000)) {
     errors.push("Timeout must be between 100 and 60000 ms");
@@ -179,12 +180,28 @@ function formatSlackPayload(payload: WebhookPayload): string {
   return JSON.stringify({ blocks });
 }
 
-function formatPayload(payload: WebhookPayload, provider: WebhookProvider): string {
+function formatTelegramPayload(payload: WebhookPayload, parseMode: string = "Markdown"): string {
+  const values = payload.rawValues.map(v => v.toFixed(2)).join(", ");
+  const lines = [
+    `*${payload.metricName}*`,
+    `\`${payload.sparkline}\``,
+    `Count: ${payload.rawValues.length} | Values: ${values}`,
+    `Time: ${payload.timestamp.toISOString()}`,
+  ];
+  if (payload.metadata && Object.keys(payload.metadata).length > 0) {
+    lines.push(`Metadata: \`${JSON.stringify(payload.metadata)}\``);
+  }
+  return lines.join("\n");
+}
+
+function formatPayload(payload: WebhookPayload, provider: WebhookProvider, telegramParseMode?: string): string {
   switch (provider) {
     case "discord":
       return formatDiscordPayload(payload);
     case "slack":
       return formatSlackPayload(payload);
+    case "telegram":
+      return formatTelegramPayload(payload, telegramParseMode);
     default:
       throw createWebhookError(`Unsupported provider: ${provider}`, provider);
   }
@@ -290,7 +307,27 @@ export async function sendWebhook(
     timeoutMs: config.timeoutMs ?? options?.timeoutMs ?? DEFAULT_DELIVERY_OPTIONS.timeoutMs,
     retryAttempts: config.retryAttempts ?? options?.retryAttempts ?? DEFAULT_DELIVERY_OPTIONS.retryAttempts,
   };
-  const formattedBody = formatPayload(payload, config.provider);
+  // For Telegram, format as text and wrap in Bot API JSON body
+  const isTelegram = config.provider === "telegram";
+  const telegramConfig = config.telegram;
+  let endpoint = config.endpoint;
+  let formattedBody: string;
+
+  if (isTelegram) {
+    if (!telegramConfig) {
+      throw createWebhookError("Telegram config (botToken, chatId) required for telegram provider", "telegram");
+    }
+    endpoint = `https://api.telegram.org/bot${telegramConfig.botToken}/sendMessage`;
+    const text = formatPayload(payload, "telegram", telegramConfig.parseMode);
+    formattedBody = JSON.stringify({
+      chat_id: telegramConfig.chatId,
+      text,
+      parse_mode: telegramConfig.parseMode || "Markdown",
+    });
+  } else {
+    formattedBody = formatPayload(payload, config.provider);
+  }
+
   let lastError: Error | undefined;
   for (let attempt = 0; attempt <= mergedOptions.retryAttempts; attempt++) {
     if (attempt > 0) {
@@ -302,7 +339,7 @@ export async function sendWebhook(
       await sleep(backoff);
     }
     const result = await attemptDelivery(
-      config.endpoint,
+      endpoint,
       config.provider,
       formattedBody,
       config.authHeaders,
