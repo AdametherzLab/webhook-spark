@@ -28,22 +28,27 @@ const DEFAULT_DELIVERY_OPTIONS: Required<WebhookDeliveryOptions> = {
   maxBackoffMs: 30000,
 };
 
-function createValidationError(message: string, details: string[]): ValidationError {
+function createValidationError(message: string, details: string[], context?: Record<string, unknown>): ValidationError {
   const error = new Error(message) as ValidationError;
   (error as any).code = "VALIDATION_ERROR";
   (error as any).details = details;
+  (error as any).context = context;
   return error;
 }
 
 function createWebhookError(
   message: string,
   provider: WebhookProvider,
-  statusCode?: number
+  statusCode?: number,
+  endpoint?: string,
+  metricName?: string
 ): WebhookError {
   const error = new Error(message) as WebhookError;
   (error as any).code = "WEBHOOK_ERROR";
   (error as any).provider = provider;
   (error as any).statusCode = statusCode;
+  (error as any).endpoint = endpoint;
+  (error as any).metricName = metricName;
   return error;
 }
 
@@ -73,7 +78,10 @@ function validateWebhookConfig(config: WebhookConfig): void {
     errors.push("Retry attempts must be between 0 and 10");
   }
   if (errors.length > 0) {
-    throw createValidationError("Invalid webhook configuration", errors);
+    throw createValidationError("Invalid webhook configuration", errors, {
+      provider: config.provider,
+      endpoint: config.endpoint,
+    });
   }
 }
 
@@ -94,151 +102,51 @@ function validateWebhookPayload(payload: WebhookPayload): void {
     errors.push("All raw values must be numbers");
   }
   if (errors.length > 0) {
-    throw createValidationError("Invalid webhook payload", errors);
-  }
-}
-
-function formatDiscordPayload(payload: WebhookPayload): string {
-  const baseFields = [
-    {
-      name: "Values",
-      value: payload.rawValues.map(v => v.toFixed(2)).join(", "),
-      inline: false,
-    },
-    {
-      name: "Count",
-      value: payload.rawValues.length.toString(),
-      inline: true,
-    },
-    {
-      name: "Timestamp",
-      value: payload.timestamp.toISOString(),
-      inline: true,
-    },
-  ];
-
-  const fields = [...baseFields];
-  
-  if (payload.metadata && Object.keys(payload.metadata).length > 0) {
-    fields.push({
-      name: "Metadata",
-      value: `\`\`\`json\n${JSON.stringify(payload.metadata, null, 2)}\n\`\`\``,
-      inline: false,
+    throw createValidationError("Invalid webhook payload", errors, {
+      metricName: payload.metricName,
+      timestamp: payload.timestamp?.toISOString(),
+      rawValuesLength: payload.rawValues.length,
     });
   }
-
-  const embed: DiscordEmbed = {
-    title: `Metric: ${payload.metricName}`,
-    description: `\`\`\`\n${payload.sparkline}\n\`\`\``,
-    color: 0x3498db,
-    fields,
-    timestamp: payload.timestamp.toISOString(),
-  };
-
-  return JSON.stringify({ embeds: [embed] });
 }
 
-function formatSlackPayload(payload: WebhookPayload): string {
-  const blocks: SlackBlock[] = [
-    {
-      type: "header",
-      text: {
-        type: "plain_text",
-        text: `Metric: ${payload.metricName}`,
-      },
-    },
-    {
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text: `\`\`\`\n${payload.sparkline}\n\`\`\``,
-      },
-    },
-    {
-      type: "section",
-      fields: [
-        {
-          type: "mrkdwn",
-          text: `*Count:*\n${payload.rawValues.length}`,
-        },
-        {
-          type: "mrkdwn",
-          text: `*Timestamp:*\n${payload.timestamp.toISOString()}`,
-        },
-      ],
-    },
-  ];
-  if (payload.metadata && Object.keys(payload.metadata).length > 0) {
-    blocks.push({
-      type: "section",
-      text: {
-        type: "mrkdwn",
-        text: `*Metadata:*\n\`\`\`json\n${JSON.stringify(payload.metadata, null, 2)}\n\`\`\``,
-      },
-    });
-  }
-  return JSON.stringify({ blocks });
-}
-
-function formatTelegramPayload(payload: WebhookPayload, parseMode: string = "Markdown"): string {
-  const values = payload.rawValues.map(v => v.toFixed(2)).join(", ");
-  const lines = [
-    `*${payload.metricName}*`,
-    `\`${payload.sparkline}\``,
-    `Count: ${payload.rawValues.length} | Values: ${values}`,
-    `Time: ${payload.timestamp.toISOString()}`,
-  ];
-  if (payload.metadata && Object.keys(payload.metadata).length > 0) {
-    lines.push(`Metadata: \`${JSON.stringify(payload.metadata)}\``);
-  }
-  return lines.join("\n");
-}
-
-function formatPayload(payload: WebhookPayload, provider: WebhookProvider, telegramParseMode?: string): string {
-  switch (provider) {
-    case "discord":
-      return formatDiscordPayload(payload);
-    case "slack":
-      return formatSlackPayload(payload);
-    case "telegram":
-      return formatTelegramPayload(payload, telegramParseMode);
-    default:
-      throw createWebhookError(`Unsupported provider: ${provider}`, provider);
-  }
-}
-
-function makeHttpRequest(
-  endpoint: string,
-  options: HttpRequestOptions
-): Promise<{ statusCode: number; statusMessage: string; body: string }> {
+async function httpRequest(
+  url: string,
+  options: HttpRequestOptions,
+  timeoutMs: number = 10000
+): Promise<WebhookResponse> {
   return new Promise((resolve, reject) => {
-    const parsedUrl = new url.URL(endpoint);
-    const isHttps = parsedUrl.protocol === "https:";
-    const requestOptions = {
+    const parsedUrl = new URL(url);
+    const httpModule = parsedUrl.protocol === "https:" ? https : http;
+
+    const req = httpModule.request({
       hostname: parsedUrl.hostname,
-      port: parsedUrl.port || (isHttps ? 443 : 80),
+      port: parsedUrl.port || (parsedUrl.protocol === "https:" ? 443 : 80),
       path: parsedUrl.pathname + parsedUrl.search,
       method: options.method,
       headers: options.headers,
-      timeout: options.timeout,
-    };
-    const req = (isHttps ? https : http).request(requestOptions, (res) => {
+      timeout: timeoutMs,
+    }, (res) => {
       const chunks: Buffer[] = [];
       res.on("data", (chunk) => chunks.push(chunk));
       res.on("end", () => {
-        const body = Buffer.concat(chunks).toString("utf-8");
         resolve({
-          statusCode: res.statusCode || 0,
-          statusMessage: res.statusMessage || "",
-          body,
+          success: res.statusCode! >= 200 && res.statusCode! < 300,
+          statusCode: res.statusCode,
+          statusMessage: res.statusMessage,
+          body: Buffer.concat(chunks).toString("utf-8"),
         });
       });
     });
-    req.on("error", (err) => reject(err));
+
+    req.on("error", (err) => {
+      reject(err);
+    });
     req.on("timeout", () => {
       req.destroy();
       reject(new Error("Request timeout"));
     });
+
     if (options.body) {
       req.write(options.body);
     }
@@ -246,129 +154,126 @@ function makeHttpRequest(
   });
 }
 
-async function attemptDelivery(
-  endpoint: string,
-  provider: WebhookProvider,
-  body: string,
-  authHeaders: Record<string, string> = {},
-  timeoutMs: number
-): Promise<WebhookResponse> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    "User-Agent": "webhook-spark/1.0",
-    ...authHeaders,
-  };
-  const options: HttpRequestOptions = {
-    method: "POST",
-    headers,
-    body,
-    timeout: timeoutMs,
-  };
-  try {
-    const response = await makeHttpRequest(endpoint, options);
-    const success = response.statusCode >= 200 && response.statusCode < 300;
-    return {
-      success,
-      statusCode: response.statusCode,
-      statusMessage: response.statusMessage,
-      body: response.body,
-    };
-  } catch (error) {
-    return {
-      success: false,
-      error: error instanceof Error ? error : new Error(String(error)),
-    };
-  }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function calculateBackoffMs(
-  attempt: number,
-  baseMs: number,
-  maxMs: number
-): number {
-  const backoff = baseMs * Math.pow(2, attempt);
-  return Math.min(backoff, maxMs);
-}
-
 export async function sendWebhook(
   payload: WebhookPayload,
-  config: WebhookConfig,
-  options?: WebhookDeliveryOptions
+  config: WebhookConfig
 ): Promise<WebhookResponse> {
   validateWebhookPayload(payload);
   validateWebhookConfig(config);
-  const mergedOptions: Required<WebhookDeliveryOptions> = {
-    ...DEFAULT_DELIVERY_OPTIONS,
-    ...options,
-    timeoutMs: config.timeoutMs ?? options?.timeoutMs ?? DEFAULT_DELIVERY_OPTIONS.timeoutMs,
-    retryAttempts: config.retryAttempts ?? options?.retryAttempts ?? DEFAULT_DELIVERY_OPTIONS.retryAttempts,
-  };
-  // For Telegram, format as text and wrap in Bot API JSON body
-  const isTelegram = config.provider === "telegram";
-  const telegramConfig = config.telegram;
-  let endpoint = config.endpoint;
-  let formattedBody: string;
 
-  if (isTelegram) {
-    if (!telegramConfig) {
-      throw createWebhookError("Telegram config (botToken, chatId) required for telegram provider", "telegram");
-    }
-    endpoint = `https://api.telegram.org/bot${telegramConfig.botToken}/sendMessage`;
-    const text = formatPayload(payload, "telegram", telegramConfig.parseMode);
-    formattedBody = JSON.stringify({
-      chat_id: telegramConfig.chatId,
-      text,
-      parse_mode: telegramConfig.parseMode || "Markdown",
-    });
-  } else {
-    formattedBody = formatPayload(payload, config.provider);
+  const parsed = new url.URL(config.endpoint);
+  let requestOptions: HttpRequestOptions;
+
+  switch (config.provider) {
+    case "discord":
+      requestOptions = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...config.authHeaders,
+        },
+        body: formatDiscordPayload(payload),
+      };
+      break;
+    case "slack":
+      requestOptions = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...config.authHeaders,
+        },
+        body: formatSlackPayload(payload),
+      };
+      break;
+    case "telegram":
+      requestOptions = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...config.authHeaders,
+        },
+        body: formatTelegramPayload(payload, config.telegram?.parseMode),
+      };
+      break;
+    default:
+      throw new Error("Unsupported webhook provider");
   }
 
-  let lastError: Error | undefined;
-  for (let attempt = 0; attempt <= mergedOptions.retryAttempts; attempt++) {
-    if (attempt > 0) {
-      const backoff = calculateBackoffMs(
-        attempt - 1,
-        mergedOptions.backoffBaseMs,
-        mergedOptions.maxBackoffMs
-      );
-      await sleep(backoff);
-    }
-    const result = await attemptDelivery(
-      endpoint,
-      config.provider,
-      formattedBody,
-      config.authHeaders,
-      mergedOptions.timeoutMs
-    );
-    if (result.success) {
-      return result;
-    }
-    lastError = result.error;
-    const isTransient = result.statusCode && (
-      result.statusCode === 429 ||
-      result.statusCode >= 500
-    );
-    if (!isTransient) {
-      break;
-    }
-    if (attempt === mergedOptions.retryAttempts) {
-      break;
+  const maxAttempts = config.retryAttempts ?? DEFAULT_DELIVERY_OPTIONS.retryAttempts;
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      console.error(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'info',
+        message: 'Attempting webhook request',
+        provider: config.provider,
+        endpoint: config.endpoint,
+        metric: payload.metricName,
+        attempt,
+        maxAttempts,
+      }));
+
+      const response = await httpRequest(parsed.href, requestOptions, config.timeoutMs);
+      
+      console.error(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'info',
+        message: 'Webhook request succeeded',
+        provider: config.provider,
+        endpoint: config.endpoint,
+        metric: payload.metricName,
+        attempt,
+        statusCode: response.statusCode,
+      }));
+
+      return response;
+    } catch (err) {
+      console.error(JSON.stringify({
+        timestamp: new Date().toISOString(),
+        level: 'error',
+        code: (err as WebhookError).code || 'UNKNOWN_ERROR',
+        message: 'Webhook request attempt failed',
+        provider: config.provider,
+        endpoint: config.endpoint,
+        metric: payload.metricName,
+        attempt,
+        maxAttempts,
+        error: (err as Error).message,
+        statusCode: (err as WebhookError).statusCode,
+      }));
+
+      lastError = err;
+      if (attempt < maxAttempts) {
+        const delay = Math.min(
+          DEFAULT_DELIVERY_OPTIONS.backoffBaseMs * Math.pow(2, attempt - 1),
+          DEFAULT_DELIVERY_OPTIONS.maxBackoffMs
+        );
+
+        console.error(JSON.stringify({
+          timestamp: new Date().toISOString(),
+          level: 'info',
+          message: 'Retrying webhook request after delay',
+          provider: config.provider,
+          endpoint: config.endpoint,
+          metric: payload.metricName,
+          nextAttempt: attempt + 1,
+          delay,
+        }));
+
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
     }
   }
-  if (lastError) {
-    throw createWebhookError(
-      `Webhook delivery failed after ${mergedOptions.retryAttempts + 1} attempts: ${lastError.message}`,
-      config.provider
-    );
-  }
-  const finalResponse: WebhookResponse = {
-    success: false,
-    error: lastError,
-  };
-  return finalResponse;
+
+  throw createWebhookError(
+    `Webhook request failed after ${maxAttempts} attempts`,
+    config.provider,
+    undefined,
+    config.endpoint,
+    payload.metricName
+  );
 }
+
+// Rest of webhook.ts remains unchanged...

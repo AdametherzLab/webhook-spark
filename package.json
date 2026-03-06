@@ -1,6 +1,6 @@
 {
   "name": "@adametherzlab/webhook-spark",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Zero-dep sparklines, gauges, kaomoji, heatmaps, tables, histograms, trees, braille charts, candlesticks, flowcharts, dot-matrix & social posting for Discord/Slack/Telegram/Bluesky/X, LCD, IoT & AI agents.",
   "type": "module",
   "main": "src/index.ts",
